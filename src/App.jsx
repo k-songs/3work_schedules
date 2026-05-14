@@ -545,6 +545,50 @@ function App() {
     )
   }
 
+  const handleAccountLinkCopy = async (record, mode = 'url') => {
+    if (!record.link) {
+      alert('복사할 링크가 없습니다.')
+      return
+    }
+
+    const textToCopy = mode === 'title-url' ? createTitleAndUrlText(record.title, record.link) : record.link
+    const copyMethod = await copyTextWithFallback(textToCopy)
+
+    if (copyMethod === 'clipboard-api') {
+      alert(`${mode === 'title-url' ? '제목+URL' : 'URL'}이 클립보드에 복사되었습니다.`)
+      return
+    }
+
+    if (copyMethod === 'exec-command') {
+      alert(
+        `브라우저 기본 클립보드 접근이 거부되어 fallback 복사 방식으로 처리했습니다.\n${mode === 'title-url' ? '제목+URL' : 'URL'}이 복사되었습니다.`,
+      )
+      return
+    }
+
+    alert('클립보드 복사에 실패했습니다. 링크 열기로 직접 접근하거나 .url 내보내기를 사용해 주세요.')
+  }
+
+  const handleAccountShortcutExport = (record) => {
+    if (!record.link) {
+      alert('내보낼 링크가 없습니다.')
+      return
+    }
+
+    const normalizedUrl = normalizeUrl(record.link)
+    if (!normalizedUrl) {
+      alert('유효한 URL이 아닙니다. 링크를 먼저 확인해 주세요.')
+      return
+    }
+
+    const shortcutName = createShortcutFilename(record.title || record.tool || 'shortcut')
+    const shortcutContent = createInternetShortcutContent(normalizedUrl)
+    downloadFile(`${shortcutName}.url`, shortcutContent, 'text/plain')
+    alert(
+      `"${shortcutName}.url" 파일을 다운로드했습니다.\n다운로드 폴더에서 바탕화면으로 옮기면 바로가기처럼 사용할 수 있습니다.`,
+    )
+  }
+
   const handleExportData = () => {
     const payload = {
       version: 1,
@@ -874,6 +918,9 @@ function App() {
             {renderAccountTable(accountScopedRecords, {
               onEdit: openEditAccountForm,
               onDelete: handleAccountDelete,
+              onCopyLink: (record) => handleAccountLinkCopy(record, 'url'),
+              onCopyTitleLink: (record) => handleAccountLinkCopy(record, 'title-url'),
+              onExportShortcut: handleAccountShortcutExport,
             })}
           </section>
         </section>
@@ -907,6 +954,9 @@ function App() {
             showAccount: true,
             onEdit: openEditAccountForm,
             onDelete: handleAccountDelete,
+            onCopyLink: (record) => handleAccountLinkCopy(record, 'url'),
+            onCopyTitleLink: (record) => handleAccountLinkCopy(record, 'title-url'),
+            onExportShortcut: handleAccountShortcutExport,
           })}
         </section>
       )}
@@ -1315,7 +1365,15 @@ function renderLocalTable(rows, options = {}) {
 }
 
 function renderAccountTable(rows, options = {}) {
-  const { title = '계정/툴 기록 인덱스', showAccount = false, onEdit, onDelete } = options
+  const {
+    title = '계정/툴 기록 인덱스',
+    showAccount = false,
+    onEdit,
+    onDelete,
+    onCopyLink,
+    onCopyTitleLink,
+    onExportShortcut,
+  } = options
 
   return (
     <div className="section-block">
@@ -1355,9 +1413,20 @@ function renderAccountTable(rows, options = {}) {
                   <td>{row.memo}</td>
                   <td>
                     {row.link ? (
-                      <a href={row.link} target="_blank" rel="noreferrer">
-                        열기
-                      </a>
+                      <div className="link-actions">
+                        <a href={row.link} target="_blank" rel="noreferrer">
+                          열기
+                        </a>
+                        <button type="button" className="text-button" onClick={() => onCopyLink?.(row)}>
+                          URL 복사
+                        </button>
+                        <button type="button" className="text-button" onClick={() => onCopyTitleLink?.(row)}>
+                          제목+URL
+                        </button>
+                        <button type="button" className="text-button" onClick={() => onExportShortcut?.(row)}>
+                          .url 내보내기
+                        </button>
+                      </div>
                     ) : (
                       '없음'
                     )}
@@ -1616,6 +1685,34 @@ function downloadFile(filename, content, mimeType) {
   link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+}
+
+function normalizeUrl(value = '') {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^[a-z]+:\/\//i.test(trimmed)) return ''
+
+  return `https://${trimmed}`
+}
+
+function createInternetShortcutContent(url) {
+  return `[InternetShortcut]\nURL=${url}\n`
+}
+
+function createTitleAndUrlText(title = '', url = '') {
+  return `${title || '(제목 없음)'}\n${url}`
+}
+
+function createShortcutFilename(title = 'shortcut') {
+  const sanitized = title
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+
+  return sanitized || 'shortcut'
 }
 
 async function copyTextWithFallback(text) {

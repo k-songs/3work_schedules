@@ -430,6 +430,24 @@ tr:last-child td {
   color: #b91c1c;
 }
 
+.link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.link-actions a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link-actions .text-button {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
 .text-button.danger {
   background: #fee2e2;
   color: #b91c1c;
