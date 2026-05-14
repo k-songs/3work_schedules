@@ -14,11 +14,11 @@ const PCs = [
 ]
 
 const googleAccounts = [
-  { id: 'google-1', name: 'Google 계정 1' },
-  { id: 'google-2', name: 'Google 계정 2' },
-  { id: 'google-3', name: 'Google 계정 3' },
-  { id: 'google-4', name: 'Google 계정 4' },
-  { id: 'google-5', name: 'Google 계정 5' },
+  { id: 'google-1', name: 'ad12' },
+  { id: 'google-2', name: 'kss' },
+  { id: 'google-3', name: 'gim' },
+  { id: 'google-4', name: 'jo' },
+  { id: 'google-5', name: 'fat' },
 ]
 
 const tools = ['Gemini', 'ChatGPT', 'Claude', 'Notion']
@@ -529,9 +529,9 @@ function App() {
        
         </div>
         <div className="hero-card">
-          <span>총 인덱스</span>
-          <strong>{localResources.length + accountRecords.length}</strong>
-          <small>로컬 자료 {localResources.length}개 / 계정 기록 {accountRecords.length}개</small>
+          <span>총 건수</span>
+          <strong>{taskItems.length + accountRecords.length}</strong>
+          <small>작업 {taskItems.length}개 / 계정 기록 {accountRecords.length}개</small>
         </div>
       </header>
 
