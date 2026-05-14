@@ -22,6 +22,7 @@ const googleAccounts = [
 ]
 
 const tools = ['Gemini', 'ChatGPT', 'Claude', 'Notion']
+const UNCATEGORIZED_TOOL_LABEL = '미분류'
 const toolHomeLinks = {
   Gemini: 'https://gemini.google.com',
   ChatGPT: 'https://chatgpt.com',
@@ -164,11 +165,11 @@ const emptyTaskForm = {
 const emptyAccountForm = {
   title: '',
   accountId: googleAccounts[0].id,
-  tool: tools[0],
+  tool: '',
   savedAt: '',
   description: '',
   memo: '',
-  link: toolHomeLinks[tools[0]],
+  link: '',
   status: 'To-Do',
   tagsText: '',
 }
@@ -223,9 +224,13 @@ function App() {
   const pcTasks = taskItems.filter((task) => task.pcId === selectedPcId)
   const pcResources = localResources.filter((resource) => resource.pcId === selectedPcId)
   const selectedAccount = googleAccounts.find((account) => account.id === selectedAccountId)
+  const accountToolFilters = useMemo(() => {
+    const dynamicTools = accountRecords.map((record) => normalizeToolLabel(record.tool))
+    return [...new Set([UNCATEGORIZED_TOOL_LABEL, ...dynamicTools])]
+  }, [accountRecords])
   const accountScopedRecords = accountRecords.filter((record) => {
     const accountMatches = record.accountId === selectedAccountId
-    const toolMatches = selectedTool === 'All' || record.tool === selectedTool
+    const toolMatches = selectedTool === 'All' || normalizeToolLabel(record.tool) === selectedTool
 
     return accountMatches && toolMatches
   })
@@ -267,13 +272,13 @@ function App() {
   }
 
   const openCreateAccountForm = (accountId = selectedAccountId, tool = selectedTool) => {
-    const nextTool = tool === 'All' ? tools[0] : tool
+    const nextTool = tool === 'All' || tool === UNCATEGORIZED_TOOL_LABEL ? '' : tool
     setEditingAccountRecord(null)
     setAccountForm({
       ...emptyAccountForm,
       accountId,
       tool: nextTool,
-      link: toolHomeLinks[nextTool],
+      link: toolHomeLinks[nextTool] ?? '',
       savedAt: getCurrentDateTime(),
     })
     setActiveModal('account')
@@ -284,11 +289,11 @@ function App() {
     setAccountForm({
       title: record.title,
       accountId: record.accountId,
-      tool: record.tool,
+      tool: record.tool ?? '',
       savedAt: record.savedAt,
       description: record.description,
       memo: record.memo ?? '',
-      link: record.link ?? toolHomeLinks[record.tool],
+      link: record.link ?? toolHomeLinks[record.tool] ?? '',
       status: record.status ?? 'To-Do',
       tagsText: record.tags.join(', '),
     })
@@ -379,7 +384,7 @@ function App() {
     const nextRecordData = {
       title: accountForm.title.trim(),
       accountId: accountForm.accountId,
-      tool: accountForm.tool,
+      tool: accountForm.tool.trim(),
       savedAt: accountForm.savedAt,
       description: accountForm.description.trim(),
       memo: accountForm.memo.trim(),
@@ -401,7 +406,7 @@ function App() {
         : [nextRecord, ...currentRecords]
     })
     setSelectedAccountId(nextRecordData.accountId)
-    setSelectedTool(nextRecordData.tool)
+    setSelectedTool(normalizeToolLabel(nextRecordData.tool))
     closeModal()
   }
 
@@ -895,7 +900,7 @@ function App() {
               >
                 전체
               </button>
-              {tools.map((tool) => (
+              {accountToolFilters.map((tool) => (
                 <button
                   key={tool}
                   className={selectedTool === tool ? 'active' : ''}
@@ -912,7 +917,7 @@ function App() {
                 '전체 계정 기록',
                 accountRecords.filter((record) => record.accountId === selectedAccountId).length,
               )}
-              {renderSummaryCard('관리 툴', tools.length)}
+              {renderSummaryCard('관리 툴', accountToolFilters.length)}
             </div>
 
             {renderAccountTable(accountScopedRecords, {
@@ -1117,13 +1122,26 @@ function renderAccountRecordModal(form, isEditing, onChange, onClose, onSubmit) 
 
           <label>
             <span>툴</span>
-            <select name="tool" value={form.tool} onChange={onChange}>
+            <input
+              name="tool"
+              value={form.tool}
+              onChange={onChange}
+              list="tool-options"
+              placeholder="예: ChatGPT, Gemini, 기타 사이트명"
+            />
+            <datalist id="tool-options">
               {tools.map((tool) => (
-                <option key={tool} value={tool}>
-                  {tool}
-                </option>
+                <option key={tool} value={tool} />
               ))}
-            </select>
+            </datalist>
+            <small>비워두면 미분류로 저장됩니다.</small>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => onChange({ target: { name: 'tool', value: '' } })}
+            >
+              미분류로 저장
+            </button>
           </label>
 
           <label>
@@ -1408,7 +1426,7 @@ function renderAccountTable(rows, options = {}) {
                     <strong>{row.title}</strong>
                   </td>
                   {showAccount && <td>{getAccountName(row.accountId)}</td>}
-                  <td>{row.tool}</td>
+                  <td>{normalizeToolLabel(row.tool)}</td>
                   <td>{row.description}</td>
                   <td>{row.memo}</td>
                   <td>
@@ -1525,11 +1543,14 @@ function loadAccountRecords() {
         id: 1000 + index,
         title: resource.description || resource.name,
         accountId: resolveAccountId(resource.accountAlias),
-        tool: tools.includes(resource.tool) ? resource.tool : 'ChatGPT',
+        tool: typeof resource.tool === 'string' ? resource.tool.trim() : '',
         savedAt: resource.savedAt ?? '',
         description: resource.description ?? '',
         memo: resource.memo ?? '',
-        link: resource.link ?? toolHomeLinks.ChatGPT,
+        link:
+          resource.link ??
+          (typeof resource.tool === 'string' ? toolHomeLinks[resource.tool.trim()] : undefined) ??
+          '',
         status: resource.status ?? 'To-Do',
         tags: Array.isArray(resource.tags) ? resource.tags : [],
       }))
@@ -1574,7 +1595,7 @@ function normalizeTask(task) {
 }
 
 function normalizeAccountRecord(record) {
-  const tool = tools.includes(record.tool) ? record.tool : tools[0]
+  const tool = typeof record.tool === 'string' ? record.tool.trim() : ''
 
   return {
     id: record.id,
@@ -1586,10 +1607,15 @@ function normalizeAccountRecord(record) {
     savedAt: record.savedAt ?? '',
     description: record.description ?? '',
     memo: record.memo ?? '',
-    link: record.link ?? toolHomeLinks[tool],
+    link: record.link ?? toolHomeLinks[tool] ?? '',
     status: record.status ?? 'To-Do',
     tags: Array.isArray(record.tags) ? record.tags : [],
   }
+}
+
+function normalizeToolLabel(tool) {
+  const normalized = typeof tool === 'string' ? tool.trim() : ''
+  return normalized || UNCATEGORIZED_TOOL_LABEL
 }
 
 function readStorage(key) {
