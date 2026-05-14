@@ -280,6 +280,19 @@ button {
   text-align: left;
 }
 
+.task-item {
+  margin-top: 12px;
+}
+
+.task-item .task-card {
+  margin-top: 0;
+}
+
+.task-card.selected {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 5px var(--accent-soft);
+}
+
 .task-card strong {
   color: var(--text-strong);
 }
@@ -293,6 +306,24 @@ button {
 .task-card:hover,
 .add-task-button:hover {
   box-shadow: var(--shadow);
+}
+
+.task-select-toggle {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-select-toggle.selected {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .progress {

@@ -197,6 +197,9 @@ function App() {
   const [accountForm, setAccountForm] = useState(emptyAccountForm)
   const [taskForm, setTaskForm] = useState(emptyTaskForm)
   const [activeModal, setActiveModal] = useState(null)
+  const [selectedTaskIds, setSelectedTaskIds] = useState([])
+  const [taskExportScope, setTaskExportScope] = useState('all')
+  const [taskClipboardFormat, setTaskClipboardFormat] = useState('text')
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localResources))
@@ -208,6 +211,12 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(taskItems))
+  }, [taskItems])
+
+  useEffect(() => {
+    setSelectedTaskIds((currentIds) =>
+      currentIds.filter((taskId) => taskItems.some((task) => task.id === taskId)),
+    )
   }, [taskItems])
 
   const selectedPc = PCs.find((pc) => pc.id === selectedPcId)
@@ -455,6 +464,87 @@ function App() {
     closeModal()
   }
 
+  const toggleTaskSelection = (taskId) => {
+    setSelectedTaskIds((currentIds) =>
+      currentIds.includes(taskId)
+        ? currentIds.filter((currentTaskId) => currentTaskId !== taskId)
+        : [...currentIds, taskId],
+    )
+  }
+
+  const selectAllTasks = () => {
+    setSelectedTaskIds(taskItems.map((task) => task.id))
+  }
+
+  const selectPcTasks = () => {
+    setSelectedTaskIds(pcTasks.map((task) => task.id))
+  }
+
+  const clearTaskSelection = () => {
+    setSelectedTaskIds([])
+  }
+
+  const getTaskExportTargets = () => {
+    if (taskExportScope === 'selected') {
+      return taskItems.filter((task) => selectedTaskIds.includes(task.id))
+    }
+
+    return taskItems
+  }
+
+  const handleTaskFileExport = (format) => {
+    const targetTasks = getTaskExportTargets()
+    if (targetTasks.length === 0) {
+      alert('내보낼 작업이 없습니다. 먼저 작업을 선택하거나 작업을 추가하세요.')
+      return
+    }
+
+    const fileDate = getCurrentDateTime().replaceAll(':', '-').replace(' ', '_')
+    if (format === 'json') {
+      downloadFile(
+        `project-master-tasks-${fileDate}.json`,
+        createTaskExportJson(targetTasks),
+        'application/json',
+      )
+      return
+    }
+
+    downloadFile(`project-master-tasks-${fileDate}.txt`, createTaskExportText(targetTasks), 'text/plain')
+  }
+
+  const handleTaskClipboardExport = async () => {
+    const targetTasks = getTaskExportTargets()
+    if (targetTasks.length === 0) {
+      alert('복사할 작업이 없습니다. 먼저 작업을 선택하거나 작업을 추가하세요.')
+      return
+    }
+
+    const textToCopy =
+      taskClipboardFormat === 'json'
+        ? createTaskExportJson(targetTasks)
+        : createTaskExportText(targetTasks)
+
+    const copyMethod = await copyTextWithFallback(textToCopy)
+
+    if (copyMethod === 'clipboard-api') {
+      alert(
+        `${targetTasks.length}개 작업의 ${taskClipboardFormat === 'json' ? 'JSON' : '텍스트'}를 클립보드에 복사했습니다.`,
+      )
+      return
+    }
+
+    if (copyMethod === 'exec-command') {
+      alert(
+        `브라우저 기본 클립보드 접근이 거부되어 fallback 복사 방식으로 처리했습니다.\n${targetTasks.length}개 작업의 ${taskClipboardFormat === 'json' ? 'JSON' : '텍스트'}가 복사되었습니다.`,
+      )
+      return
+    }
+
+    alert(
+      '클립보드 복사에 실패했습니다.\n브라우저 권한 또는 보안 컨텍스트를 확인해 주세요.\n대안: 텍스트/JSON 내보내기를 사용하세요.',
+    )
+  }
+
   const handleExportData = () => {
     const payload = {
       version: 1,
@@ -605,6 +695,72 @@ function App() {
             </div>
 
             <div className="section-block">
+              <h3>작업 제목/내용 내보내기</h3>
+              <p className="hero-copy">카드에서 선택한 작업만 따로 내보내거나, 전체 작업을 한번에 내보낼 수 있습니다.</p>
+              <div className="form-actions split">
+                <div>
+                  <button type="button" className="text-button" onClick={selectPcTasks}>
+                    현재 PC 작업 선택
+                  </button>
+                  <button type="button" className="text-button" onClick={selectAllTasks}>
+                    전체 작업 선택
+                  </button>
+                  <button type="button" className="text-button" onClick={clearTaskSelection}>
+                    선택 해제
+                  </button>
+                </div>
+                <small>선택된 작업 {selectedTaskIds.length}개</small>
+              </div>
+
+              <div className="form-actions split">
+                <label>
+                  <span>내보내기 범위</span>
+                  <select
+                    name="taskExportScope"
+                    value={taskExportScope}
+                    onChange={(event) => setTaskExportScope(event.target.value)}
+                  >
+                    <option value="all">전체 작업</option>
+                    <option value="selected">선택한 작업</option>
+                  </select>
+                </label>
+                <div>
+                  <button
+                    type="button"
+                    className="ghost-button secondary"
+                    onClick={() => handleTaskFileExport('text')}
+                  >
+                    텍스트 내보내기
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button secondary"
+                    onClick={() => handleTaskFileExport('json')}
+                  >
+                    JSON 내보내기
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-actions split">
+                <label>
+                  <span>클립보드 형식</span>
+                  <select
+                    name="taskClipboardFormat"
+                    value={taskClipboardFormat}
+                    onChange={(event) => setTaskClipboardFormat(event.target.value)}
+                  >
+                    <option value="text">텍스트</option>
+                    <option value="json">JSON</option>
+                  </select>
+                </label>
+                <button type="button" className="ghost-button" onClick={handleTaskClipboardExport}>
+                  클립보드 복사
+                </button>
+              </div>
+            </div>
+
+            <div className="section-block">
               <h3>작업 상태</h3>
               <div className="kanban">
                 {Object.entries(statusLabels).map(([status, label]) => (
@@ -622,18 +778,31 @@ function App() {
                     {pcTasks
                       .filter((task) => task.status === status)
                       .map((task) => (
-                        <button
-                          key={task.id}
-                          className="task-card"
-                          onClick={() => openEditTaskForm(task)}
-                        >
-                          <strong>{task.title}</strong>
-                          <p>{task.note}</p>
-                          <div className="progress">
-                            <span style={{ width: `${task.progress}%` }} />
-                          </div>
-                          <small>{task.progress}%</small>
-                        </button>
+                        <div key={task.id} className="task-item">
+                          <button
+                            className={selectedTaskIds.includes(task.id) ? 'task-card selected' : 'task-card'}
+                            onClick={() => openEditTaskForm(task)}
+                          >
+                            <strong>{task.title}</strong>
+                            <p>{task.note}</p>
+                            <div className="progress">
+                              <span style={{ width: `${task.progress}%` }} />
+                            </div>
+                            <small>{task.progress}%</small>
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              selectedTaskIds.includes(task.id)
+                                ? 'task-select-toggle selected'
+                                : 'task-select-toggle'
+                            }
+                            onClick={() => toggleTaskSelection(task.id)}
+                            aria-pressed={selectedTaskIds.includes(task.id)}
+                          >
+                            {selectedTaskIds.includes(task.id) ? '✓ 선택됨' : '+ 선택'}
+                          </button>
+                        </div>
                       ))}
                   </div>
                 ))}
@@ -1403,6 +1572,82 @@ function clampProgress(value) {
   if (Number.isNaN(progress)) return 0
 
   return Math.min(100, Math.max(0, Math.round(progress)))
+}
+
+function createTaskExportRows(tasks) {
+  return tasks.map((task, index) => ({
+    order: index + 1,
+    id: task.id,
+    title: task.title ?? '',
+    note: task.note ?? '',
+    status: task.status ?? 'To-Do',
+    progress: clampProgress(task.progress),
+    pcId: task.pcId ?? PCs[0].id,
+    pcName: getPcName(task.pcId),
+  }))
+}
+
+function createTaskExportText(tasks) {
+  const rows = createTaskExportRows(tasks)
+
+  return rows
+    .map(
+      (row) =>
+        [
+          `[${row.order}] ${row.title || '(제목 없음)'}`,
+          `- 메모: ${row.note || '-'}`,
+          `- 상태/진행도: ${statusLabels[row.status] ?? row.status} / ${row.progress}%`,
+          `- 위치: ${row.pcName} (${row.pcId})`,
+        ].join('\n'),
+    )
+    .join('\n\n')
+}
+
+function createTaskExportJson(tasks) {
+  return JSON.stringify(createTaskExportRows(tasks), null, 2)
+}
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function copyTextWithFallback(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return 'clipboard-api'
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '-1000px'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+
+    const copied = document.execCommand('copy')
+    textarea.remove()
+
+    if (copied) return 'exec-command'
+  } catch {
+    // ignore
+  }
+
+  return 'failed'
 }
 
 export default App
