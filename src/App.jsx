@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 const LOCAL_STORAGE_KEY = 'project-master-local-resources'
@@ -213,6 +213,7 @@ function App() {
   const [pcDeleteTargetId, setPcDeleteTargetId] = useState('')
   const [pcRenameTargetId, setPcRenameTargetId] = useState('')
   const [pcRenameNameInput, setPcRenameNameInput] = useState('')
+  const backupImportInputRef = useRef(null)
 
   useEffect(() => {
     localStorage.setItem(PC_STORAGE_KEY, JSON.stringify(pcs))
@@ -256,7 +257,7 @@ function App() {
   const selectedAccount = googleAccounts.find((account) => account.id === selectedAccountId)
   const accountToolFilters = useMemo(() => {
     const dynamicTools = accountRecords.map((record) => normalizeToolLabel(record.tool))
-    return [...new Set([UNCATEGORIZED_TOOL_LABEL, ...dynamicTools])]
+    return [...new Set([UNCATEGORIZED_TOOL_LABEL, ...tools, ...dynamicTools])]
   }, [accountRecords])
   const accountScopedRecords = accountRecords.filter((record) => {
     const accountMatches = record.accountId === selectedAccountId
@@ -695,6 +696,105 @@ function App() {
     )
   }
 
+  const handleBackupExport = () => {
+    const payload = {
+      version: 2,
+      exportedAt: getCurrentDateTime(),
+      pcs,
+      localResources,
+      accountRecords,
+      tasks: taskItems,
+    }
+
+    const fileDate = getCurrentDateTime().replaceAll(':', '-').replace(' ', '_')
+    downloadFile(
+      `project-master-backup-${fileDate}.json`,
+      JSON.stringify(payload, null, 2),
+      'application/json',
+    )
+    alert('백업 파일을 다운로드했습니다.')
+  }
+
+  const handleBackupImportClick = () => {
+    backupImportInputRef.current?.click()
+  }
+
+  const handleBackupImport = async (event) => {
+    const selectedFile = event.target.files?.[0]
+    if (!selectedFile) return
+
+    try {
+      const fileContent = await selectedFile.text()
+      const parsedData = JSON.parse(fileContent)
+
+      if (
+        !Array.isArray(parsedData?.pcs) ||
+        !Array.isArray(parsedData?.localResources) ||
+        !Array.isArray(parsedData?.accountRecords)
+      ) {
+        alert('가져올 수 없는 백업 형식입니다.')
+        return
+      }
+
+      const importedPcs = parsedData.pcs
+        .map((pc, index) => normalizePc(pc, index))
+        .filter((pc) => pc.id && pc.name)
+      if (importedPcs.length === 0) {
+        alert('가져올 수 있는 PC 데이터가 없습니다.')
+        return
+      }
+
+      // Avoid duplicate ids in malformed backups.
+      const dedupedPcs = []
+      importedPcs.forEach((pc) => {
+        if (dedupedPcs.some((existingPc) => existingPc.id === pc.id)) {
+          dedupedPcs.push({ ...pc, id: createPcId(dedupedPcs) })
+          return
+        }
+        dedupedPcs.push(pc)
+      })
+
+      const validPcIds = new Set(dedupedPcs.map((pc) => pc.id))
+      const fallbackPcId = dedupedPcs[0].id
+      const nextLocalResources = parsedData.localResources.map((resource) => {
+        const normalized = normalizeLocalResource(resource)
+        return {
+          ...normalized,
+          pcId: validPcIds.has(normalized.pcId) ? normalized.pcId : fallbackPcId,
+        }
+      })
+      const nextTasks = Array.isArray(parsedData.tasks)
+        ? parsedData.tasks.map((task) => {
+            const normalized = normalizeTask(task)
+            return {
+              ...normalized,
+              pcId: validPcIds.has(normalized.pcId) ? normalized.pcId : fallbackPcId,
+            }
+          })
+        : taskItems
+      const nextAccountRecords = parsedData.accountRecords.map(normalizeAccountRecord)
+
+      const confirmed = confirm(
+        `백업 파일을 가져올까요?\n현재 데이터가 아래 개수로 교체됩니다.\nPC ${dedupedPcs.length}개 / 로컬 자료 ${nextLocalResources.length}개 / AI 기록 ${nextAccountRecords.length}개 / 작업 ${nextTasks.length}개`,
+      )
+      if (!confirmed) return
+
+      setPcs(dedupedPcs)
+      setLocalResources(nextLocalResources)
+      setAccountRecords(nextAccountRecords)
+      setTaskItems(nextTasks)
+      setSelectedPcId(fallbackPcId)
+      setSelectedAccountId(nextAccountRecords[0]?.accountId ?? googleAccounts[0].id)
+      setSelectedTool('All')
+      setSelectedTaskIdsState([])
+      alert('백업 데이터를 불러왔습니다.')
+    } catch {
+      alert('백업 파일을 읽는 중 문제가 생겼습니다.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="hero">
@@ -753,7 +853,7 @@ function App() {
                 }}
                 aria-expanded={pcSettingsOpen}
               >
-                PC 추가 · 이름 · 삭제
+                PC 추가
               </button>
               {pcSettingsOpen && (
                 <div className="pc-settings-panel">
@@ -838,6 +938,27 @@ function App() {
                     {pcs.length <= 1 && (
                       <small className="pc-delete-hint">PC는 최소 1개 유지됩니다.</small>
                     )}
+                  </div>
+                  <div className="pc-backup-block">
+                    <p className="pc-settings-section-title">백업 / 복원</p>
+                    <small className="pc-delete-hint">
+                      사이트 데이터 삭제 전에 JSON 백업을 내려받아 두세요.
+                    </small>
+                    <div className="pc-backup-actions">
+                      <button type="button" className="ghost-button secondary" onClick={handleBackupExport}>
+                        JSON 백업
+                      </button>
+                      <button type="button" className="text-button" onClick={handleBackupImportClick}>
+                        JSON 불러오기
+                      </button>
+                    </div>
+                    <input
+                      ref={backupImportInputRef}
+                      className="pc-backup-input"
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleBackupImport}
+                    />
                   </div>
                 </div>
               )}

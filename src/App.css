@@ -281,6 +281,23 @@ button {
   font-size: 12px;
 }
 
+.pc-backup-block {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.pc-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pc-backup-input {
+  display: none;
+}
+
 .pc-create-form {
   display: grid;
   gap: 8px;
