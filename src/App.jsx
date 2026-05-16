@@ -1,24 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const LOCAL_STORAGE_KEY = 'project-master-local-resources'
 const ACCOUNT_STORAGE_KEY = 'project-master-account-records'
 const TASK_STORAGE_KEY = 'project-master-tasks'
+const PC_STORAGE_KEY = 'project-master-pcs'
 const LEGACY_STORAGE_KEY = 'project-master-resources'
 
-const PCs = [
-  { id: 'pc-1', name: 'PC 1', label: '자료 위치', summary: 'PC 1에 있는 작업과 자료를 확인' },
-  { id: 'pc-2', name: 'PC 2', label: '자료 위치', summary: 'PC 2에 있는 작업과 자료를 확인' },
-  { id: 'pc-3', name: 'PC 3', label: '자료 위치', summary: 'PC 3에 있는 작업과 자료를 확인' },
-  { id: 'pc-4', name: 'PC 4', label: '자료 위치', summary: 'PC 4에 있는 작업과 자료를 확인' },
+const initialPcs = [
+  { id: 'pc-1', name: 'gram', label: '자료 위치', summary: 'PC 1에 있는 작업과 자료를 확인' },
+  { id: 'pc-2', name: 'basics', label: '자료 위치', summary: 'PC 2에 있는 작업과 자료를 확인' },
+  { id: 'pc-3', name: 'PC', label: '자료 위치', summary: 'PC 3에 있는 작업과 자료를 확인' },
+  { id: 'pc-4', name: 'mac', label: '자료 위치', summary: 'PC 4에 있는 작업과 자료를 확인' },
 ]
 
 const googleAccounts = [
   { id: 'google-1', name: 'ad12' },
   { id: 'google-2', name: 'kss' },
   { id: 'google-3', name: 'gim' },
-  { id: 'google-4', name: 'jo' },
-  { id: 'google-5', name: 'fat' },
+  { id: 'google-4', name: 'arti' },
+  { id: 'google-5', name: 'jo' },
+  { id: 'google-6', name: 'fat' },
+  
 ]
 
 const tools = ['Gemini', 'ChatGPT', 'Claude', 'Notion']
@@ -112,7 +115,7 @@ const initialAccountRecords = [
     tool: 'ChatGPT',
     savedAt: '2026-05-14 09:10',
     description: '대시보드 구조와 CRUD 방향을 정리한 대화',
-    memo: 'PC 위치와 무관한 계정 기반 기록',
+    memo: 'PC 위치와 무관한 계정 기반 AI 기록',
     link: 'https://chatgpt.com',
     status: 'Doing',
     tags: ['기획', '대화'],
@@ -143,23 +146,27 @@ const initialAccountRecords = [
   },
 ]
 
-const emptyLocalForm = {
-  name: '',
-  pcId: PCs[0].id,
-  savedAt: '',
-  description: '',
-  memo: '',
-  pathMemo: '',
-  status: 'To-Do',
-  tagsText: '',
+function createEmptyLocalForm(defaultPcId = '') {
+  return {
+    name: '',
+    pcId: defaultPcId,
+    savedAt: '',
+    description: '',
+    memo: '',
+    pathMemo: '',
+    status: 'To-Do',
+    tagsText: '',
+  }
 }
 
-const emptyTaskForm = {
-  title: '',
-  pcId: PCs[0].id,
-  status: 'To-Do',
-  progress: '0',
-  note: '',
+function createEmptyTaskForm(defaultPcId = '') {
+  return {
+    title: '',
+    pcId: defaultPcId,
+    status: 'To-Do',
+    progress: '0',
+    note: '',
+  }
 }
 
 const emptyAccountForm = {
@@ -175,18 +182,19 @@ const emptyAccountForm = {
 }
 
 const statusLabels = {
-  Done: '했던 거',
-  'To-Do': '할 거',
+  Done: '했던 것',
+  'To-Do': '할 것',
   Doing: '도중',
-  Review: '확인할 거',
+  Review: '확인할 것',
 }
 
 function App() {
+  const [pcs, setPcs] = useState(() => loadPcs())
+  const defaultPcId = pcs[0]?.id ?? ''
   const [localResources, setLocalResources] = useState(() => loadLocalResources())
   const [accountRecords, setAccountRecords] = useState(() => loadAccountRecords())
   const [taskItems, setTaskItems] = useState(() => loadTasks())
-  const importInputRef = useRef(null)
-  const [selectedPcId, setSelectedPcId] = useState(PCs[0].id)
+  const [selectedPcId, setSelectedPcId] = useState(defaultPcId)
   const [selectedAccountId, setSelectedAccountId] = useState(googleAccounts[0].id)
   const [selectedTool, setSelectedTool] = useState('All')
   const [view, setView] = useState('pc')
@@ -194,13 +202,21 @@ function App() {
   const [editingLocalResource, setEditingLocalResource] = useState(null)
   const [editingAccountRecord, setEditingAccountRecord] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
-  const [localForm, setLocalForm] = useState(emptyLocalForm)
+  const [localForm, setLocalForm] = useState(() => createEmptyLocalForm(defaultPcId))
   const [accountForm, setAccountForm] = useState(emptyAccountForm)
-  const [taskForm, setTaskForm] = useState(emptyTaskForm)
+  const [taskForm, setTaskForm] = useState(() => createEmptyTaskForm(defaultPcId))
   const [activeModal, setActiveModal] = useState(null)
-  const [selectedTaskIds, setSelectedTaskIds] = useState([])
+  const [selectedTaskIdsState, setSelectedTaskIdsState] = useState([])
   const [taskExportScope, setTaskExportScope] = useState('all')
-  const [taskClipboardFormat, setTaskClipboardFormat] = useState('text')
+  const [pcNameInput, setPcNameInput] = useState('')
+  const [pcSettingsOpen, setPcSettingsOpen] = useState(false)
+  const [pcDeleteTargetId, setPcDeleteTargetId] = useState('')
+  const [pcRenameTargetId, setPcRenameTargetId] = useState('')
+  const [pcRenameNameInput, setPcRenameNameInput] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(PC_STORAGE_KEY, JSON.stringify(pcs))
+  }, [pcs])
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localResources))
@@ -214,15 +230,29 @@ function App() {
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(taskItems))
   }, [taskItems])
 
-  useEffect(() => {
-    setSelectedTaskIds((currentIds) =>
-      currentIds.filter((taskId) => taskItems.some((task) => task.id === taskId)),
-    )
-  }, [taskItems])
+  const existingTaskIds = useMemo(() => new Set(taskItems.map((task) => task.id)), [taskItems])
+  const selectedTaskIds = useMemo(
+    () => selectedTaskIdsState.filter((id) => existingTaskIds.has(id)),
+    [selectedTaskIdsState, existingTaskIds],
+  )
 
-  const selectedPc = PCs.find((pc) => pc.id === selectedPcId)
-  const pcTasks = taskItems.filter((task) => task.pcId === selectedPcId)
-  const pcResources = localResources.filter((resource) => resource.pcId === selectedPcId)
+  const selectedPc =
+    pcs.find((pc) => pc.id === selectedPcId) ??
+    pcs[0] ?? { id: '', name: 'PC 미지정', label: '자료 위치', summary: 'PC를 먼저 추가해 주세요.' }
+  const pcDeleteTargetSafe =
+    pcs.length > 0 &&
+    pcDeleteTargetId &&
+    pcs.some((pc) => pc.id === pcDeleteTargetId)
+      ? pcDeleteTargetId
+      : (pcs[0]?.id ?? '')
+  const pcRenameTargetSafe =
+    pcs.length > 0 &&
+    pcRenameTargetId &&
+    pcs.some((pc) => pc.id === pcRenameTargetId)
+      ? pcRenameTargetId
+      : (pcs[0]?.id ?? '')
+  const pcTasks = taskItems.filter((task) => task.pcId === selectedPc.id)
+  const pcResources = localResources.filter((resource) => resource.pcId === selectedPc.id)
   const selectedAccount = googleAccounts.find((account) => account.id === selectedAccountId)
   const accountToolFilters = useMemo(() => {
     const dynamicTools = accountRecords.map((record) => normalizeToolLabel(record.tool))
@@ -241,18 +271,24 @@ function App() {
       return {
         local: localResources,
         accounts: accountRecords,
+        tasks: taskItems,
       }
     }
 
     return {
-      local: localResources.filter((resource) => localResourceMatches(resource, keyword)),
+      local: localResources.filter((resource) =>
+        localResourceMatches(resource, keyword, (pcId) => getPcName(pcId, pcs)),
+      ),
       accounts: accountRecords.filter((record) => accountRecordMatches(record, keyword)),
+      tasks: taskItems.filter((task) =>
+        taskItemMatches(task, keyword, (pcId) => getPcName(pcId, pcs)),
+      ),
     }
-  }, [accountRecords, localResources, query])
+  }, [accountRecords, localResources, pcs, query, taskItems])
 
-  const openCreateLocalForm = (pcId = selectedPcId) => {
+  const openCreateLocalForm = (pcId = selectedPc.id) => {
     setEditingLocalResource(null)
-    setLocalForm({ ...emptyLocalForm, pcId, savedAt: getCurrentDateTime() })
+    setLocalForm({ ...createEmptyLocalForm(defaultPcId), pcId, savedAt: getCurrentDateTime() })
     setActiveModal('local')
   }
 
@@ -300,9 +336,9 @@ function App() {
     setActiveModal('account')
   }
 
-  const openCreateTaskForm = (status = 'To-Do', pcId = selectedPcId) => {
+  const openCreateTaskForm = (status = 'To-Do', pcId = selectedPc.id) => {
     setEditingTask(null)
-    setTaskForm({ ...emptyTaskForm, pcId, status })
+    setTaskForm({ ...createEmptyTaskForm(defaultPcId), pcId, status })
     setActiveModal('task')
   }
 
@@ -323,9 +359,9 @@ function App() {
     setEditingLocalResource(null)
     setEditingAccountRecord(null)
     setEditingTask(null)
-    setLocalForm(emptyLocalForm)
+    setLocalForm(createEmptyLocalForm(defaultPcId))
     setAccountForm(emptyAccountForm)
-    setTaskForm(emptyTaskForm)
+    setTaskForm(createEmptyTaskForm(defaultPcId))
   }
 
   const handleLocalFormChange = (event) => {
@@ -374,7 +410,7 @@ function App() {
           )
         : [nextResource, ...currentResources]
     })
-    setSelectedPcId(nextResourceData.pcId)
+    setSelectedPcId(nextResourceData.pcId || selectedPc.id)
     closeModal()
   }
 
@@ -388,7 +424,7 @@ function App() {
       savedAt: accountForm.savedAt,
       description: accountForm.description.trim(),
       memo: accountForm.memo.trim(),
-      link: accountForm.link.trim(),
+      link: normalizeUrl(accountForm.link),
       status: accountForm.status,
       tags: parseTags(accountForm.tagsText),
     }
@@ -431,7 +467,7 @@ function App() {
         ? currentTasks.map((task) => (task.id === editingTask.id ? nextTask : task))
         : [nextTask, ...currentTasks]
     })
-    setSelectedPcId(nextTaskData.pcId)
+    setSelectedPcId(nextTaskData.pcId || selectedPc.id)
     closeModal()
   }
 
@@ -451,7 +487,7 @@ function App() {
   const handleAccountDelete = (recordId) => {
     const target = accountRecords.find((record) => record.id === recordId)
     const confirmed = confirm(
-      `"${target?.title ?? '계정 기록'}" 기록을 삭제할까요?\n구글 계정의 실제 기록은 삭제되지 않습니다.`,
+      `"${target?.title ?? 'AI 기록'}" 기록을 삭제할까요?\n구글 계정의 실제 기록은 삭제되지 않습니다.`,
     )
 
     if (!confirmed) return
@@ -469,24 +505,125 @@ function App() {
     closeModal()
   }
 
+  const handlePcTasksDeleteAll = () => {
+    if (pcTasks.length === 0) {
+      alert('삭제할 작업이 없습니다.')
+      return
+    }
+
+    const confirmed = confirm(
+      `${selectedPc.name}의 작업 ${pcTasks.length}개를 전부 삭제할까요?\n이 작업은 되돌릴 수 없습니다.`,
+    )
+    if (!confirmed) return
+
+    setTaskItems((currentTasks) => currentTasks.filter((task) => task.pcId !== selectedPc.id))
+  }
+
+  const handlePcLocalDeleteAll = () => {
+    if (pcResources.length === 0) {
+      alert('삭제할 로컬 자료가 없습니다.')
+      return
+    }
+
+    const confirmed = confirm(
+      `${selectedPc.name}의 로컬 자료 ${pcResources.length}개를 전부 삭제할까요?\n실제 파일은 삭제되지 않습니다.`,
+    )
+    if (!confirmed) return
+
+    setLocalResources((currentResources) =>
+      currentResources.filter((resource) => resource.pcId !== selectedPc.id),
+    )
+  }
+
+  const handlePcCreate = (event) => {
+    event.preventDefault()
+    const trimmedName = pcNameInput.trim()
+
+    if (!trimmedName) {
+      alert('PC 이름을 입력해 주세요.')
+      return
+    }
+
+    const nextPc = {
+      id: createPcId(pcs),
+      name: trimmedName,
+      label: '자료 위치',
+      summary: `${trimmedName}에 있는 작업과 자료를 확인`,
+    }
+
+    setPcs((currentPcs) => [...currentPcs, nextPc])
+    setSelectedPcId(nextPc.id)
+    setPcNameInput('')
+  }
+
+  const handlePcRename = (event) => {
+    event.preventDefault()
+    const targetId = pcRenameTargetSafe
+    const trimmedName = pcRenameNameInput.trim()
+    if (!trimmedName) {
+      alert('PC 이름을 입력해 주세요.')
+      return
+    }
+
+    const targetPc = pcs.find((pc) => pc.id === targetId)
+    if (!targetPc) return
+
+    if (targetPc.name === trimmedName) return
+
+    setPcs((currentPcs) =>
+      currentPcs.map((pc) =>
+        pc.id === targetId
+          ? {
+              ...pc,
+              name: trimmedName,
+              summary: `${trimmedName}에 있는 작업과 자료를 확인`,
+            }
+          : pc,
+      ),
+    )
+  }
+
+  const handlePcDelete = (pcId) => {
+    if (pcs.length <= 1) {
+      alert('최소 1개의 PC는 남아 있어야 합니다.')
+      return
+    }
+
+    const targetPc = pcs.find((pc) => pc.id === pcId)
+    if (!targetPc) return
+
+    const taskCount = taskItems.filter((task) => task.pcId === pcId).length
+    const resourceCount = localResources.filter((resource) => resource.pcId === pcId).length
+    const confirmed = confirm(
+      `"${targetPc.name}"을(를) 삭제할까요?\n연결된 작업 ${taskCount}개와 로컬 자료 ${resourceCount}개도 함께 삭제됩니다.`,
+    )
+    if (!confirmed) return
+
+    setPcs((currentPcs) => currentPcs.filter((pc) => pc.id !== pcId))
+    setTaskItems((currentTasks) => currentTasks.filter((task) => task.pcId !== pcId))
+    setLocalResources((currentResources) =>
+      currentResources.filter((resource) => resource.pcId !== pcId),
+    )
+    if (selectedPc.id === pcId) {
+      const fallbackPc = pcs.find((pc) => pc.id !== pcId)
+      if (fallbackPc) setSelectedPcId(fallbackPc.id)
+    }
+  }
+
   const toggleTaskSelection = (taskId) => {
-    setSelectedTaskIds((currentIds) =>
+    setSelectedTaskIdsState((currentIds) =>
       currentIds.includes(taskId)
         ? currentIds.filter((currentTaskId) => currentTaskId !== taskId)
         : [...currentIds, taskId],
     )
   }
 
-  const selectAllTasks = () => {
-    setSelectedTaskIds(taskItems.map((task) => task.id))
-  }
-
   const selectPcTasks = () => {
-    setSelectedTaskIds(pcTasks.map((task) => task.id))
+    setSelectedTaskIdsState(pcTasks.map((task) => task.id))
   }
 
   const clearTaskSelection = () => {
-    setSelectedTaskIds([])
+    setSelectedTaskIdsState([])
   }
 
   const getTaskExportTargets = () => {
@@ -497,7 +634,7 @@ function App() {
     return taskItems
   }
 
-  const handleTaskFileExport = (format) => {
+  const handleTaskFileExport = () => {
     const targetTasks = getTaskExportTargets()
     if (targetTasks.length === 0) {
       alert('내보낼 작업이 없습니다. 먼저 작업을 선택하거나 작업을 추가하세요.')
@@ -505,58 +642,22 @@ function App() {
     }
 
     const fileDate = getCurrentDateTime().replaceAll(':', '-').replace(' ', '_')
-    if (format === 'json') {
-      downloadFile(
-        `project-master-tasks-${fileDate}.json`,
-        createTaskExportJson(targetTasks),
-        'application/json',
-      )
-      return
-    }
-
-    downloadFile(`project-master-tasks-${fileDate}.txt`, createTaskExportText(targetTasks), 'text/plain')
-  }
-
-  const handleTaskClipboardExport = async () => {
-    const targetTasks = getTaskExportTargets()
-    if (targetTasks.length === 0) {
-      alert('복사할 작업이 없습니다. 먼저 작업을 선택하거나 작업을 추가하세요.')
-      return
-    }
-
-    const textToCopy =
-      taskClipboardFormat === 'json'
-        ? createTaskExportJson(targetTasks)
-        : createTaskExportText(targetTasks)
-
-    const copyMethod = await copyTextWithFallback(textToCopy)
-
-    if (copyMethod === 'clipboard-api') {
-      alert(
-        `${targetTasks.length}개 작업의 ${taskClipboardFormat === 'json' ? 'JSON' : '텍스트'}를 클립보드에 복사했습니다.`,
-      )
-      return
-    }
-
-    if (copyMethod === 'exec-command') {
-      alert(
-        `브라우저 기본 클립보드 접근이 거부되어 fallback 복사 방식으로 처리했습니다.\n${targetTasks.length}개 작업의 ${taskClipboardFormat === 'json' ? 'JSON' : '텍스트'}가 복사되었습니다.`,
-      )
-      return
-    }
-
-    alert(
-      '클립보드 복사에 실패했습니다.\n브라우저 권한 또는 보안 컨텍스트를 확인해 주세요.\n대안: 텍스트/JSON 내보내기를 사용하세요.',
+    downloadFile(
+      `project-master-tasks-${fileDate}.txt`,
+      createTaskExportText(targetTasks, pcs),
+      'text/plain',
     )
   }
 
   const handleAccountLinkCopy = async (record, mode = 'url') => {
-    if (!record.link) {
+    const normalizedLink = normalizeUrl(record.link)
+    if (!normalizedLink) {
       alert('복사할 링크가 없습니다.')
       return
     }
 
-    const textToCopy = mode === 'title-url' ? createTitleAndUrlText(record.title, record.link) : record.link
+    const textToCopy =
+      mode === 'title-url' ? createTitleAndUrlText(record.title, normalizedLink) : normalizedLink
     const copyMethod = await copyTextWithFallback(textToCopy)
 
     if (copyMethod === 'clipboard-api') {
@@ -594,83 +695,18 @@ function App() {
     )
   }
 
-  const handleExportData = () => {
-    const payload = {
-      version: 1,
-      exportedAt: getCurrentDateTime(),
-      localResources,
-      accountRecords,
-      tasks: taskItems,
-    }
-    const fileContent = JSON.stringify(payload, null, 2)
-    const blob = new Blob([fileContent], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const fileDate = getCurrentDateTime().replaceAll(':', '-').replace(' ', '_')
-
-    link.href = url
-    link.download = `project-master-backup-${fileDate}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleImportClick = () => {
-    importInputRef.current?.click()
-  }
-
-  const handleImportData = async (event) => {
-    const selectedFile = event.target.files?.[0]
-    if (!selectedFile) return
-
-    try {
-      const fileContent = await selectedFile.text()
-      const parsedData = JSON.parse(fileContent)
-      const nextLocalResources = Array.isArray(parsedData.localResources)
-        ? parsedData.localResources.map(normalizeLocalResource)
-        : []
-      const nextAccountRecords = Array.isArray(parsedData.accountRecords)
-        ? parsedData.accountRecords.map(normalizeAccountRecord)
-        : []
-      const nextTasks = Array.isArray(parsedData.tasks)
-        ? parsedData.tasks.map(normalizeTask)
-        : taskItems
-
-      if (!Array.isArray(parsedData.localResources) || !Array.isArray(parsedData.accountRecords)) {
-        alert('가져올 수 없는 JSON 형식입니다.')
-        return
-      }
-
-      const confirmed = confirm(
-        `JSON 백업을 가져올까요?\n현재 로컬 자료 ${localResources.length}개와 계정 기록 ${accountRecords.length}개가 백업 내용으로 교체됩니다.`,
-      )
-
-      if (!confirmed) return
-
-      setLocalResources(nextLocalResources)
-      setAccountRecords(nextAccountRecords)
-      setTaskItems(nextTasks)
-      setSelectedPcId(nextLocalResources[0]?.pcId ?? PCs[0].id)
-      setSelectedAccountId(nextAccountRecords[0]?.accountId ?? googleAccounts[0].id)
-      setSelectedTool('All')
-    } catch {
-      alert('JSON 파일을 읽는 중 문제가 생겼습니다.')
-    } finally {
-      event.target.value = ''
-    }
-  }
-
   return (
     <main className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Project Master</p>
-          <h1>기록관리</h1>
+          <p className="eyebrow">개요</p>
+          <h3>기록관리</h3>
        
         </div>
         <div className="hero-card">
           <span>총 건수</span>
           <strong>{taskItems.length + accountRecords.length}</strong>
-          <small>작업 {taskItems.length}개 / 계정 기록 {accountRecords.length}개</small>
+          <small>작업 {taskItems.length}개 / AI 기록 {accountRecords.length}개</small>
         </div>
       </header>
 
@@ -682,41 +718,20 @@ function App() {
           className={view === 'accounts' ? 'active' : ''}
           onClick={() => setView('accounts')}
         >
-          계정/툴 기록
+          계정/AI 기록
         </button>
         <button className={view === 'search' ? 'active' : ''} onClick={() => setView('search')}>
           통합 검색
         </button>
       </nav>
 
-      <section className="backup-actions" aria-label="자료 백업 관리">
-        <div>
-          <strong>JSON 백업</strong>
-          <span>다른 PC로 옮길 때 내보내기 후 가져오기를 사용하세요.</span>
-        </div>
-        <div className="backup-buttons">
-          <button className="ghost-button secondary" onClick={handleExportData}>
-            JSON 내보내기
-          </button>
-          <button className="ghost-button" onClick={handleImportClick}>
-            JSON 가져오기
-          </button>
-        </div>
-        <input
-          ref={importInputRef}
-          className="hidden-file-input"
-          type="file"
-          accept="application/json,.json"
-          onChange={handleImportData}
-        />
-      </section>
-
       {view === 'pc' && (
         <section className="workspace-grid">
           <aside className="pc-list" aria-label="컴퓨터 선택">
-            {PCs.map((pc) => (
+            {pcs.map((pc) => (
               <button
                 key={pc.id}
+                type="button"
                 className={selectedPcId === pc.id ? 'pc-button active' : 'pc-button'}
                 onClick={() => setSelectedPcId(pc.id)}
               >
@@ -724,16 +739,119 @@ function App() {
                 <span>{pc.label}</span>
               </button>
             ))}
+            <div className="pc-list-settings">
+              <button
+                type="button"
+                className={`ghost-button secondary pc-settings-toggle ${pcSettingsOpen ? 'active' : ''}`}
+                onClick={() => {
+                  const nextOpen = !pcSettingsOpen
+                  if (nextOpen && pcs.length > 0) {
+                    setPcRenameTargetId(selectedPcId)
+                    setPcRenameNameInput(pcs.find((pc) => pc.id === selectedPcId)?.name ?? '')
+                  }
+                  setPcSettingsOpen(nextOpen)
+                }}
+                aria-expanded={pcSettingsOpen}
+              >
+                PC 추가 · 이름 · 삭제
+              </button>
+              {pcSettingsOpen && (
+                <div className="pc-settings-panel">
+                  <div className="pc-settings-panel-header">
+                    <p className="pc-settings-panel-title">PC 설정</p>
+                    <button
+                      type="button"
+                      className="text-button pc-settings-close"
+                      onClick={() => setPcSettingsOpen(false)}
+                      aria-label="PC 설정 닫기"
+                    >
+                      닫기
+                    </button>
+                  </div>
+                  <form className="pc-create-form" onSubmit={handlePcCreate}>
+                    <input
+                      value={pcNameInput}
+                      onChange={(event) => setPcNameInput(event.target.value)}
+                      placeholder="새 PC 이름"
+                      aria-label="새 PC 이름"
+                    />
+                    <button type="submit" className="ghost-button secondary">
+                      + PC 추가
+                    </button>
+                  </form>
+                  <form className="pc-rename-form" onSubmit={handlePcRename}>
+                    <p className="pc-settings-section-title">이름 수정</p>
+                    <label className="pc-delete-label">
+                      <span>수정할 PC</span>
+                      <select
+                        value={pcRenameTargetSafe}
+                        onChange={(event) => {
+                          const id = event.target.value
+                          setPcRenameTargetId(id)
+                          setPcRenameNameInput(pcs.find((pc) => pc.id === id)?.name ?? '')
+                        }}
+                        aria-label="이름을 수정할 PC 선택"
+                      >
+                        {pcs.map((pc) => (
+                          <option key={pc.id} value={pc.id}>
+                            {pc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="pc-delete-label">
+                      <span>새 이름</span>
+                      <input
+                        value={pcRenameNameInput}
+                        onChange={(event) => setPcRenameNameInput(event.target.value)}
+                        placeholder="표시 이름"
+                        aria-label="새 PC 표시 이름"
+                      />
+                    </label>
+                    <button type="submit" className="ghost-button secondary">
+                      이름 저장
+                    </button>
+                  </form>
+                  <div className="pc-delete-block">
+                    <label className="pc-delete-label">
+                      <span>삭제할 PC</span>
+                      <select
+                        value={pcDeleteTargetSafe}
+                        onChange={(event) => setPcDeleteTargetId(event.target.value)}
+                        aria-label="삭제할 PC 선택"
+                      >
+                        {pcs.map((pc) => (
+                          <option key={pc.id} value={pc.id}>
+                            {pc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="text-button danger pc-settings-delete"
+                      disabled={pcs.length <= 1}
+                      onClick={() => handlePcDelete(pcDeleteTargetSafe)}
+                    >
+                      PC 삭제
+                    </button>
+                    {pcs.length <= 1 && (
+                      <small className="pc-delete-hint">PC는 최소 1개 유지됩니다.</small>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </aside>
 
           <section className="panel">
             <div className="panel-header">
               <div>
-                <p className="eyebrow">{selectedPc.label}</p>
+                <p className="eyebrow">{selectedPc.label ?? '자료 위치'}</p>
                 <h2>{selectedPc.name} 로컬 자료</h2>
                 <p>{selectedPc.summary}</p>
               </div>
-              <button className="ghost-button" onClick={() => openCreateLocalForm(selectedPcId)}>
+              <button className="ghost-button" onClick={() => openCreateLocalForm(selectedPc.id)}>
                 + 로컬 자료 추가
               </button>
             </div>
@@ -750,9 +868,6 @@ function App() {
                 <div>
                   <button type="button" className="text-button" onClick={selectPcTasks}>
                     현재 PC 작업 선택
-                  </button>
-                  <button type="button" className="text-button" onClick={selectAllTasks}>
-                    전체 작업 선택
                   </button>
                   <button type="button" className="text-button" onClick={clearTaskSelection}>
                     선택 해제
@@ -777,50 +892,33 @@ function App() {
                   <button
                     type="button"
                     className="ghost-button secondary"
-                    onClick={() => handleTaskFileExport('text')}
+                    onClick={handleTaskFileExport}
                   >
                     텍스트 내보내기
                   </button>
-                  <button
-                    type="button"
-                    className="ghost-button secondary"
-                    onClick={() => handleTaskFileExport('json')}
-                  >
-                    JSON 내보내기
-                  </button>
                 </div>
-              </div>
-
-              <div className="form-actions split">
-                <label>
-                  <span>클립보드 형식</span>
-                  <select
-                    name="taskClipboardFormat"
-                    value={taskClipboardFormat}
-                    onChange={(event) => setTaskClipboardFormat(event.target.value)}
-                  >
-                    <option value="text">텍스트</option>
-                    <option value="json">JSON</option>
-                  </select>
-                </label>
-                <button type="button" className="ghost-button" onClick={handleTaskClipboardExport}>
-                  클립보드 복사
-                </button>
               </div>
             </div>
 
             <div className="section-block">
-              <h3>작업 상태</h3>
+              <div className="section-heading">
+                <h3>작업 상태</h3>
+                <button type="button" className="text-button danger" onClick={handlePcTasksDeleteAll}>
+                  전부 삭제
+                </button>
+              </div>
               <div className="kanban">
                 {Object.entries(statusLabels).map(([status, label]) => (
                   <div key={status} className="kanban-column">
                     <div className="column-title">
                       <span>{label}</span>
-                      <small>{pcTasks.filter((task) => task.status === status).length}</small>
+                      <span className="column-count">
+                        {pcTasks.filter((task) => task.status === status).length}
+                      </span>
                     </div>
                     <button
                       className="add-task-button"
-                      onClick={() => openCreateTaskForm(status, selectedPcId)}
+                      onClick={() => openCreateTaskForm(status, selectedPc.id)}
                     >
                       + 작업 추가
                     </button>
@@ -851,6 +949,13 @@ function App() {
                           >
                             {selectedTaskIds.includes(task.id) ? '✓ 선택됨' : '+ 선택'}
                           </button>
+                          <button
+                            type="button"
+                            className="text-button danger"
+                            onClick={() => handleTaskDelete(task.id)}
+                          >
+                            삭제
+                          </button>
                         </div>
                       ))}
                   </div>
@@ -861,6 +966,13 @@ function App() {
             {renderLocalTable(pcResources, {
               onEdit: openEditLocalForm,
               onDelete: handleLocalDelete,
+              emptyActionLabel: '+ 로컬 자료 추가',
+              onEmptyAction: () => openCreateLocalForm(selectedPc.id),
+              headerActions: (
+                <button type="button" className="text-button danger" onClick={handlePcLocalDeleteAll}>
+                  전부 삭제
+                </button>
+              ),
             })}
           </section>
         </section>
@@ -876,7 +988,7 @@ function App() {
                 onClick={() => setSelectedAccountId(account.id)}
               >
                 <strong>{account.name}</strong>
-                <span>계정 기반 기록</span>
+                <span>계정</span>
               </button>
             ))}
           </aside>
@@ -884,16 +996,16 @@ function App() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <p className="eyebrow">Account Records</p>
-                <h2>{selectedAccount.name} 툴 기록</h2>
-                <p>PC 위치와 무관하게 이 계정에 남아 있는 툴별 기록을 확인합니다.</p>
+                <p className="eyebrow">계정/AI 기록</p>
+                <h2>{selectedAccount.name}의 AI 기록</h2>
+                <p>PC 위치와 무관하게 이 계정에 남아 있는 AI 서비스별 기록을 확인합니다.</p>
               </div>
               <button className="ghost-button" onClick={() => openCreateAccountForm()}>
-                + 계정 기록 추가
+                + AI 기록 추가
               </button>
             </div>
 
-            <nav className="view-tabs" aria-label="툴 필터 선택">
+            <nav className="view-tabs" aria-label="서비스 필터 선택">
               <button
                 className={selectedTool === 'All' ? 'active' : ''}
                 onClick={() => setSelectedTool('All')}
@@ -912,12 +1024,12 @@ function App() {
             </nav>
 
             <div className="summary-grid">
-              {renderSummaryCard('계정 기록', accountScopedRecords.length)}
+              {renderSummaryCard('AI 기록', accountScopedRecords.length)}
               {renderSummaryCard(
-                '전체 계정 기록',
+                '전체 AI 기록',
                 accountRecords.filter((record) => record.accountId === selectedAccountId).length,
               )}
-              {renderSummaryCard('관리 툴', accountToolFilters.length)}
+              {renderSummaryCard('관리 서비스', accountToolFilters.length)}
             </div>
 
             {renderAccountTable(accountScopedRecords, {
@@ -926,6 +1038,8 @@ function App() {
               onCopyLink: (record) => handleAccountLinkCopy(record, 'url'),
               onCopyTitleLink: (record) => handleAccountLinkCopy(record, 'title-url'),
               onExportShortcut: handleAccountShortcutExport,
+              emptyActionLabel: '+ AI 기록 추가',
+              onEmptyAction: () => openCreateAccountForm(),
             })}
           </section>
         </section>
@@ -933,29 +1047,38 @@ function App() {
 
       {view === 'search' && (
         <section className="panel">
-          <div className="panel-header">
+          <div className="panel-header search-header">
             <div>
-              <p className="eyebrow">Global Search</p>
-              <h2>통합 검색 / 필터링</h2>
-              <p>PC별 로컬 자료와 계정/툴 기록을 함께 검색하되 결과는 구분해서 보여줍니다.</p>
+              <p className="eyebrow">검색</p>
+              <h2>통합 검색</h2>
+              
             </div>
             <input
               className="search-input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="파일명, 계정, 툴, 설명, 태그 검색"
+              placeholder="파일명, 계정, 서비스, 작업, 상태, 설명, 태그 검색"
             />
           </div>
 
           {renderLocalTable(searchResults.local, {
             title: '로컬 자료 검색 결과',
             showPc: true,
+            pcNameById: (pcId) => getPcName(pcId, pcs),
             onEdit: openEditLocalForm,
             onDelete: handleLocalDelete,
           })}
 
+          {renderTaskTable(searchResults.tasks, {
+            title: '작업 검색 결과',
+            showPc: true,
+            pcNameById: (pcId) => getPcName(pcId, pcs),
+            onEdit: openEditTaskForm,
+            onDelete: handleTaskDelete,
+          })}
+
           {renderAccountTable(searchResults.accounts, {
-            title: '계정/툴 기록 검색 결과',
+            title: '계정/AI 기록 검색 결과',
             showAccount: true,
             onEdit: openEditAccountForm,
             onDelete: handleAccountDelete,
@@ -973,6 +1096,7 @@ function App() {
           handleLocalFormChange,
           closeModal,
           handleLocalSubmit,
+          pcs,
         )}
 
       {activeModal === 'account' &&
@@ -992,18 +1116,19 @@ function App() {
           closeModal,
           handleTaskSubmit,
           () => handleTaskDelete(editingTask?.id),
+          pcs,
         )}
     </main>
   )
 }
 
-function renderLocalResourceModal(form, isEditing, onChange, onClose, onSubmit) {
+function renderLocalResourceModal(form, isEditing, onChange, onClose, onSubmit, pcs) {
   return (
     <div className="modal-backdrop">
       <dialog className="resource-modal" aria-labelledby="local-form-title" open>
         <div className="modal-header">
           <div>
-            <p className="eyebrow">Local Resource</p>
+            <p className="eyebrow">로컬 자료</p>
             <h2 id="local-form-title">{isEditing ? '로컬 자료 수정' : '새 로컬 자료 추가'}</h2>
             <p>실제 파일은 업로드하지 않고 파일명, 위치, 설명, 메모만 저장합니다.</p>
           </div>
@@ -1021,7 +1146,7 @@ function renderLocalResourceModal(form, isEditing, onChange, onClose, onSubmit) 
           <label>
             <span>위치 PC</span>
             <select name="pcId" value={form.pcId} onChange={onChange}>
-              {PCs.map((pc) => (
+              {pcs.map((pc) => (
                 <option key={pc.id} value={pc.id}>
                   {pc.name}
                 </option>
@@ -1094,8 +1219,8 @@ function renderAccountRecordModal(form, isEditing, onChange, onClose, onSubmit) 
       <dialog className="resource-modal" aria-labelledby="account-form-title" open>
         <div className="modal-header">
           <div>
-            <p className="eyebrow">Account Record</p>
-            <h2 id="account-form-title">{isEditing ? '계정 기록 수정' : '새 계정 기록 추가'}</h2>
+            <p className="eyebrow">AI 기록</p>
+            <h2 id="account-form-title">{isEditing ? 'AI 기록 수정' : '새 AI 기록 추가'}</h2>
             <p>비밀번호, 인증 코드, 백업 코드, 세션 정보는 저장하지 마세요.</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="닫기">
@@ -1121,7 +1246,7 @@ function renderAccountRecordModal(form, isEditing, onChange, onClose, onSubmit) 
           </label>
 
           <label>
-            <span>툴</span>
+            <span>서비스</span>
             <input
               name="tool"
               value={form.tool}
@@ -1155,7 +1280,7 @@ function renderAccountRecordModal(form, isEditing, onChange, onClose, onSubmit) 
               name="description"
               value={form.description}
               onChange={onChange}
-              placeholder="이 계정/툴 기록이 무엇인지 짧게 입력"
+              placeholder="이 AI 기록이 무엇인지 짧게 입력"
               required
             />
           </label>
@@ -1203,13 +1328,13 @@ function renderAccountRecordModal(form, isEditing, onChange, onClose, onSubmit) 
   )
 }
 
-function renderTaskModal(form, isEditing, onChange, onClose, onSubmit, onDelete) {
+function renderTaskModal(form, isEditing, onChange, onClose, onSubmit, onDelete, pcs) {
   return (
     <div className="modal-backdrop">
       <dialog className="resource-modal" aria-labelledby="task-form-title" open>
         <div className="modal-header">
           <div>
-            <p className="eyebrow">Task Tracker</p>
+            <p className="eyebrow">작업</p>
             <h2 id="task-form-title">{isEditing ? '작업 수정' : '새 작업 추가'}</h2>
             <p>작업 상태 칸에서 바로 추가하고, 카드를 클릭해 수정합니다.</p>
           </div>
@@ -1233,7 +1358,7 @@ function renderTaskModal(form, isEditing, onChange, onClose, onSubmit, onDelete)
           <label>
             <span>위치 PC</span>
             <select name="pcId" value={form.pcId} onChange={onChange}>
-              {PCs.map((pc) => (
+              {pcs.map((pc) => (
                 <option key={pc.id} value={pc.id}>
                   {pc.name}
                 </option>
@@ -1327,14 +1452,109 @@ function renderSummaryCard(label, value) {
   )
 }
 
-function renderLocalTable(rows, options = {}) {
-  const { title = '로컬 자료 인덱스', showPc = false, onEdit, onDelete } = options
+function renderTaskTable(rows, options = {}) {
+  const {
+    title = '작업',
+    showPc = false,
+    pcNameById = (pcId) => getPcName(pcId),
+    onEdit,
+    onDelete,
+    emptyActionLabel,
+    onEmptyAction,
+  } = options
 
   return (
-    <div className="section-block">
-      <h3>{title}</h3>
+    <div className="section-block table-section">
+      <div className="section-heading">
+        <h3>{title}</h3>
+      </div>
       <div className="table-wrap">
-        <table>
+        <table className="data-table task-table">
+          <colgroup>
+            {showPc && <col className="col-compact" />}
+            <col className="col-primary" />
+            <col className="col-note" />
+            <col className="col-status" />
+            <col className="col-compact" />
+            <col className="col-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              {showPc && <th>PC</th>}
+              <th>작업 제목</th>
+              <th>메모</th>
+              <th>상태</th>
+              <th>진행도</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={showPc ? 6 : 5} className="empty-cell">
+                  <div className="empty-state">
+                    <strong>검색된 작업이 없습니다.</strong>
+                    {onEmptyAction && (
+                      <button type="button" className="ghost-button secondary" onClick={onEmptyAction}>
+                        {emptyActionLabel ?? '+ 작업 추가'}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr key={row.id}>
+                  {showPc && <td>{pcNameById(row.pcId)}</td>}
+                  <td>
+                    <strong>{row.title}</strong>
+                  </td>
+                  <td>{row.note}</td>
+                  <td>{statusLabels[row.status] ?? row.status}</td>
+                  <td>{row.progress}%</td>
+                  <td>
+                    {renderRowActions(() => onEdit?.(row), () => onDelete?.(row.id))}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function renderLocalTable(rows, options = {}) {
+  const {
+    title = '로컬 자료 인덱스',
+    showPc = false,
+    pcNameById = (pcId) => getPcName(pcId),
+    onEdit,
+    onDelete,
+    emptyActionLabel,
+    onEmptyAction,
+    headerActions,
+  } = options
+
+  return (
+    <div className="section-block table-section">
+      <div className="section-heading">
+        <h3>{title}</h3>
+        {headerActions}
+      </div>
+      <div className="table-wrap">
+        <table className="data-table local-table">
+          <colgroup>
+            <col className="col-primary" />
+            {showPc && <col className="col-compact" />}
+            <col className="col-description" />
+            <col className="col-note" />
+            <col className="col-status" />
+            <col className="col-date" />
+            <col className="col-tags" />
+            <col className="col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>파일명</th>
@@ -1351,7 +1571,14 @@ function renderLocalTable(rows, options = {}) {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={showPc ? 8 : 7} className="empty-cell">
-                  등록된 로컬 자료가 없습니다.
+                  <div className="empty-state">
+                    <strong>등록된 로컬 자료가 없습니다.</strong>
+                    {onEmptyAction && (
+                      <button type="button" className="ghost-button secondary" onClick={onEmptyAction}>
+                        {emptyActionLabel ?? '+ 추가'}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -1361,7 +1588,7 @@ function renderLocalTable(rows, options = {}) {
                     <strong>{row.name}</strong>
                     {row.pathMemo && <small>{row.pathMemo}</small>}
                   </td>
-                  {showPc && <td>{getPcName(row.pcId)}</td>}
+                  {showPc && <td>{pcNameById(row.pcId)}</td>}
                   <td>{row.description}</td>
                   <td>{row.memo}</td>
                   <td>{statusLabels[row.status] ?? row.status}</td>
@@ -1384,25 +1611,39 @@ function renderLocalTable(rows, options = {}) {
 
 function renderAccountTable(rows, options = {}) {
   const {
-    title = '계정/툴 기록 인덱스',
+    title = '계정/AI 기록 인덱스',
     showAccount = false,
     onEdit,
     onDelete,
     onCopyLink,
     onCopyTitleLink,
     onExportShortcut,
+    emptyActionLabel,
+    onEmptyAction,
   } = options
 
   return (
-    <div className="section-block">
+    <div className="section-block table-section">
       <h3>{title}</h3>
       <div className="table-wrap">
-        <table>
+        <table className="data-table account-table">
+          <colgroup>
+            <col className="col-primary" />
+            {showAccount && <col className="col-compact" />}
+            <col className="col-tool" />
+            <col className="col-description" />
+            <col className="col-note" />
+            <col className="col-link" />
+            <col className="col-status" />
+            <col className="col-date" />
+            <col className="col-tags" />
+            <col className="col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>기록 제목</th>
               {showAccount && <th>계정</th>}
-              <th>툴</th>
+              <th>서비스</th>
               <th>설명</th>
               <th>메모</th>
               <th>링크</th>
@@ -1416,7 +1657,14 @@ function renderAccountTable(rows, options = {}) {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={showAccount ? 10 : 9} className="empty-cell">
-                  등록된 계정/툴 기록이 없습니다.
+                  <div className="empty-state">
+                    <strong>등록된 계정/AI 기록이 없습니다.</strong>
+                    {onEmptyAction && (
+                      <button type="button" className="ghost-button secondary" onClick={onEmptyAction}>
+                        {emptyActionLabel ?? '+ 추가'}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -1430,9 +1678,9 @@ function renderAccountTable(rows, options = {}) {
                   <td>{row.description}</td>
                   <td>{row.memo}</td>
                   <td>
-                    {row.link ? (
+                    {normalizeUrl(row.link) ? (
                       <div className="link-actions">
-                        <a href={row.link} target="_blank" rel="noreferrer">
+                        <a href={normalizeUrl(row.link)} target="_blank" rel="noreferrer">
                           열기
                         </a>
                         <button type="button" className="text-button" onClick={() => onCopyLink?.(row)}>
@@ -1480,22 +1728,41 @@ function renderTagList(tags) {
 function renderRowActions(onEdit, onDelete) {
   return (
     <div className="row-actions">
-      <button onClick={onEdit}>수정</button>
-      <button className="danger" onClick={onDelete}>
+      <button type="button" onClick={onEdit}>
+        수정
+      </button>
+      <button type="button" className="danger" onClick={onDelete}>
         삭제
       </button>
     </div>
   )
 }
 
-function localResourceMatches(resource, keyword) {
+function taskItemMatches(task, keyword, pcNameById = (pcId) => getPcName(pcId)) {
+  const statusLabel = statusLabels[task.status] ?? ''
+  const searchable = [
+    task.title,
+    task.note,
+    task.status,
+    statusLabel,
+    String(task.progress),
+    `${task.progress ?? 0}%`,
+    pcNameById(task.pcId),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  return searchable.includes(keyword)
+}
+
+function localResourceMatches(resource, keyword, pcNameById = (pcId) => getPcName(pcId)) {
   const searchable = [
     resource.name,
     resource.description,
     resource.memo,
     resource.pathMemo,
     resource.status,
-    getPcName(resource.pcId),
+    pcNameById(resource.pcId),
     resource.tags.join(' '),
   ]
     .join(' ')
@@ -1529,6 +1796,16 @@ function loadLocalResources() {
   if (legacyResources) return legacyResources.map(normalizeLocalResource)
 
   return initialLocalResources
+}
+
+function loadPcs() {
+  const savedPcs = readStorage(PC_STORAGE_KEY)
+  if (savedPcs) {
+    const normalized = savedPcs.map(normalizePc).filter((pc) => pc.id && pc.name)
+    if (normalized.length > 0) return normalized
+  }
+
+  return initialPcs
 }
 
 function loadAccountRecords() {
@@ -1572,7 +1849,7 @@ function normalizeLocalResource(resource) {
   return {
     id: resource.id,
     name: resource.name,
-    pcId: resource.pcId ?? PCs[0].id,
+    pcId: resource.pcId ?? initialPcs[0].id,
     savedAt: resource.savedAt ?? '',
     taskId: resource.taskId ?? null,
     description: resource.description ?? '',
@@ -1589,8 +1866,24 @@ function normalizeTask(task) {
     title: task.title ?? '',
     status: Object.hasOwn(statusLabels, task.status) ? task.status : 'To-Do',
     progress: clampProgress(task.progress),
-    pcId: PCs.some((pc) => pc.id === task.pcId) ? task.pcId : PCs[0].id,
+    pcId:
+      typeof task.pcId === 'string' && task.pcId.trim() ? task.pcId.trim() : initialPcs[0].id,
     note: task.note ?? '',
+  }
+}
+
+function normalizePc(pc, index) {
+  const fallbackName = `PC ${index + 1}`
+  const name = typeof pc?.name === 'string' ? pc.name.trim() : ''
+
+  return {
+    id: typeof pc?.id === 'string' && pc.id.trim() ? pc.id.trim() : `pc-${index + 1}`,
+    name: name || fallbackName,
+    label: typeof pc?.label === 'string' && pc.label.trim() ? pc.label.trim() : '자료 위치',
+    summary:
+      typeof pc?.summary === 'string' && pc.summary.trim()
+        ? pc.summary.trim()
+        : `${name || fallbackName}에 있는 작업과 자료를 확인`,
   }
 }
 
@@ -1607,7 +1900,7 @@ function normalizeAccountRecord(record) {
     savedAt: record.savedAt ?? '',
     description: record.description ?? '',
     memo: record.memo ?? '',
-    link: record.link ?? toolHomeLinks[tool] ?? '',
+    link: normalizeUrl(record.link ?? toolHomeLinks[tool] ?? ''),
     status: record.status ?? 'To-Do',
     tags: Array.isArray(record.tags) ? record.tags : [],
   }
@@ -1644,8 +1937,8 @@ function getCurrentDateTime() {
   return `${date} ${time}`
 }
 
-function getPcName(pcId) {
-  return PCs.find((pc) => pc.id === pcId)?.name ?? 'PC 미지정'
+function getPcName(pcId, pcs = initialPcs) {
+  return pcs.find((pc) => pc.id === pcId)?.name ?? 'PC 미지정'
 }
 
 function getAccountName(accountId) {
@@ -1669,7 +1962,7 @@ function clampProgress(value) {
   return Math.min(100, Math.max(0, Math.round(progress)))
 }
 
-function createTaskExportRows(tasks) {
+function createTaskExportRows(tasks, pcs = initialPcs) {
   return tasks.map((task, index) => ({
     order: index + 1,
     id: task.id,
@@ -1677,13 +1970,13 @@ function createTaskExportRows(tasks) {
     note: task.note ?? '',
     status: task.status ?? 'To-Do',
     progress: clampProgress(task.progress),
-    pcId: task.pcId ?? PCs[0].id,
-    pcName: getPcName(task.pcId),
+    pcId: task.pcId ?? initialPcs[0].id,
+    pcName: getPcName(task.pcId, pcs),
   }))
 }
 
-function createTaskExportText(tasks) {
-  const rows = createTaskExportRows(tasks)
+function createTaskExportText(tasks, pcs = initialPcs) {
+  const rows = createTaskExportRows(tasks, pcs)
 
   return rows
     .map(
@@ -1696,10 +1989,6 @@ function createTaskExportText(tasks) {
         ].join('\n'),
     )
     .join('\n\n')
-}
-
-function createTaskExportJson(tasks) {
-  return JSON.stringify(createTaskExportRows(tasks), null, 2)
 }
 
 function downloadFile(filename, content, mimeType) {
@@ -1739,6 +2028,14 @@ function createShortcutFilename(title = 'shortcut') {
     .slice(0, 80)
 
   return sanitized || 'shortcut'
+}
+
+function createPcId(existingPcs) {
+  let nextId = `pc-${Date.now()}`
+  while (existingPcs.some((pc) => pc.id === nextId)) {
+    nextId = `pc-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  }
+  return nextId
 }
 
 async function copyTextWithFallback(text) {
