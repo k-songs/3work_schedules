@@ -498,10 +498,14 @@ function App() {
 
   const handleTaskDelete = (taskId) => {
     const target = taskItems.find((task) => task.id === taskId)
-    const confirmed = confirm(`"${target?.title ?? '작업'}"을 삭제할까요?`)
+    // target: { id: 123, title: "기획 회의", ... } 또는 undefined
+    // 만약 target이 undefined라면 target?.title은 undefined가 되어 '작업'으로 표시됨
+    // confirmed: confirm 함수가 반환하는 boolean값 (확인 = true, 취소 = false)
+    const confirmed = confirm(`"${target?.title ?? '작업'}"을 삭제할까요?`) // 삭제 확인 대화창 표시
 
-    if (!confirmed) return
-
+    // confirm 대화상자에서 '확인'을 누르지 않은 경우(=취소를 누른 경우) 함수 실행을 중단하여 삭제가 진행되지 않도록 함
+    if (!confirmed) return //거짓일 경우 함수 실행을 중단하여 삭제가 진행되지 않도록 함
+  
     setTaskItems((currentTasks) => currentTasks.filter((task) => task.id !== taskId))
     closeModal()
   }
@@ -716,7 +720,7 @@ function App() {
   }
 
   const handleBackupImportClick = () => {
-    backupImportInputRef.current?.click()
+    backupImportInputRef.current?.click() // 파일 선택창 열기
   }
 
   const handleBackupImport = async (event) => {
@@ -724,9 +728,11 @@ function App() {
     if (!selectedFile) return
 
     try {
+      // 선택한 JSON 파일을 문자열로 읽은 뒤, 앱에서 다룰 수 있는 객체로 변환합니다.
       const fileContent = await selectedFile.text()
       const parsedData = JSON.parse(fileContent)
 
+      // 백업 파일에 필수 데이터 묶음이 배열 형태로 들어있는지 먼저 확인합니다.
       if (
         !Array.isArray(parsedData?.pcs) ||
         !Array.isArray(parsedData?.localResources) ||
@@ -736,6 +742,7 @@ function App() {
         return
       }
 
+      // 백업의 PC 목록을 앱 형식에 맞게 보정하고, 실제로 쓸 수 있는 PC만 남깁니다.
       const importedPcs = parsedData.pcs
         .map((pc, index) => normalizePc(pc, index))
         .filter((pc) => pc.id && pc.name)
@@ -744,7 +751,7 @@ function App() {
         return
       }
 
-      // Avoid duplicate ids in malformed backups.
+      // 백업 파일 안에서 같은 PC id가 반복되면 뒤쪽 PC에 새 id를 부여합니다.
       const dedupedPcs = []
       importedPcs.forEach((pc) => {
         if (dedupedPcs.some((existingPc) => existingPc.id === pc.id)) {
@@ -754,6 +761,7 @@ function App() {
         dedupedPcs.push(pc)
       })
 
+      // 자료와 작업이 존재하지 않는 PC를 가리키면 첫 번째 PC로 연결해 깨진 참조를 막습니다.
       const validPcIds = new Set(dedupedPcs.map((pc) => pc.id))
       const fallbackPcId = dedupedPcs[0].id
       const nextLocalResources = parsedData.localResources.map((resource) => {
@@ -774,6 +782,7 @@ function App() {
         : taskItems
       const nextAccountRecords = parsedData.accountRecords.map(normalizeAccountRecord)
 
+      // 사용자가 확인하면 현재 앱 데이터를 백업 데이터로 교체합니다.
       const confirmed = confirm(
         `백업 파일을 가져올까요?\n현재 데이터가 아래 개수로 교체됩니다.\nPC ${dedupedPcs.length}개 / 로컬 자료 ${nextLocalResources.length}개 / AI 기록 ${nextAccountRecords.length}개 / 작업 ${nextTasks.length}개`,
       )
